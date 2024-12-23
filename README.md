@@ -1,4 +1,5 @@
-Links for the 
+Links for the scripts under the directory /docs:
+
 https://adriatunezaquilue.github.io/Substance_Use_GenomicSEM/3-FactorAnalysis_final.html
 https://adriatunezaquilue.github.io/Substance_Use_GenomicSEM/4-FactorAnalysis-AlternativeModels_final.html
 https://adriatunezaquilue.github.io/Substance_Use_GenomicSEM/5-Sensitivity_final.html
