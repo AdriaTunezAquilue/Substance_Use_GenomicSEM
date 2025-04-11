@@ -1,0 +1,132 @@
+---
+title: "Multivariate GWAS"
+author: "AA & JP"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+# Multivariate GWAS: PREPARE SUMMARY STATISTICS
+
+```{r setup, include=FALSE}
+require(GenomicSEM)
+```
+
+## Specify arguments
+
+```{r, results = 'hide'}
+# files = the name of the summary statistics file
+## These need to be in the same order as your ldsc object          
+files<-c("GSCAN_MA_siN_cor.txt", "GSCAN_MA_scN_cor.txt",
+         "sPY_TOT1L.HRC.25PCs.packyears.fastGWA", "GSCAN_MA_smkageN_cor.txt",
+         "nicdep", "alccon", "alc_freq_r", "alcp.txt", "ALCH_withrsID.txt",
+         "caninit_with23andme.trueN" ,"candep.trueN",
+         "ICC4.FREQ_LIFETIME.25PCs.HRC.GWAS.fastGWA", "cocdep", "ODvsUnexp.txt")
+
+# ref = the name of the reference file used to obtain SNP MAF
+ref <- "reference.1000G.maf.0.005.txt"
+
+# trait.names = the name of the traits to use for column labeling
+trait.names<-c("SMKINI", "SMKCES", "PACKYE", "SMKAGE", "SMKDEP", "ALCCON", "ALCFRQ",
+               "ALCP", "ALCDEP", "CANEV", "CANDEP", "CANFL", "COCDEP", "OPIODEP")  
+
+# se.logit = whether the standard errors are on an logistic scale
+se.logit<-c(T,T,T,T,T,T,T,T,T,T,T,T,T,T)
+
+# linprob: whether it was a binary outcome that was analyzed as continuoue -or-
+# it is a file with only Z-statistics. This is true for ALCP for our data
+linprob<-c(F,F,F,F,F,F,F,T,T,F,F,F,F,T)
+
+# sample size. This is only needed for continuous outcomes or outcomes where linprob is TRUE
+# we do not provide sample size for ALCP as it is already a column in the GWAS data 
+N<-c(NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA,NA)
+
+# parallel. Whether the function should be run in parallel.
+parallel=TRUE
+```
+
+## Run sumstats 
+
+```{r, results = 'hide'}
+INT_sumstats<-sumstats(files=files,ref=ref,trait.names=trait.names,se.logit=se.logit,linprob=linprob,N=N)
+```
+
+## Save output 
+
+```{r, results = 'hide'}
+saveRDS(INT_sumstats, file = "INT_sumstats.rds")
+```
+
+# Multivariate GWAS: SPLIT IN CHUNKS
+
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
+## The sumstats file that we use as input is the file we create with the previous script and it includes all betas and SE of the model we want to use. This script divides these sumstats in 300 parts so that it is easier to run them. 
+
+```{r, results = 'hide'}
+SUsumstats <- readRDS("/gpfs/home1/atunez/GWAS_Joelle/INT_sumstats.rds")
+nr_splits <- 300
+idx <- rep_len(1:nr_splits, length.out = nrow(SUsumstats)) %>% sort()
+SUsumstats$IDX <- idx
+
+for (i in 1:nr_splits) {
+  
+  SUsumstats_sub <- SUsumstats %>% filter(IDX == i) %>% select(-IDX)
+  saveRDS(SUsumstats_sub, paste0("/gpfs/home1/atunez/GWAS_Joelle/GSEM_GWAS_split/SU_GSEM_SPLIT", i, ".rds"))
+  
+}
+```
+
+# Multivariate GWAS: RUN GWAS
+
+```{r setup, include=FALSE}
+library(GenomicSEM)
+library(tidyverse)
+library(lavaan)
+library(data.table)
+library(glue)
+```
+
+## First, the LDSC output and summary statistics are loaded. Second, the model is specified. Third, userGWAS function is run. 
+
+```{r, results = 'hide'}
+setwd("/gpfs/home1/atunez/GWAS_Joelle")
+
+IDX <- Sys.getenv("SLURM_ARRAY_TASK_ID")
+load("/gpfs/home1/atunez/GWAS_Joelle/mldsc_29May2023.14.TOT.RData")
+snps <- readRDS(glue("/gpfs/home1/atunez/GWAS_Joelle/GSEM_GWAS_split/SU_GSEM_SPLIT{IDX}.rds"))
+
+model_common <-'
+
+F1 =~ NA*SMKCES + PACKYE + SMKDEP + ALCDEP + ALCFRQ + COCDEP + CANEV + SMKINI + SMKAGE
+F2 =~ NA*CANDEP + COCDEP + OPIODEP + SMKAGE
+F3 =~ NA*ALCDEP + ALCCON + ALCFRQ + ALCP 
+F4 =~ NA*CANEV + CANFL + SMKINI
+
+F1~~1*F1
+F2~~1*F2
+F3~~1*F3
+F4~~1*F4
+
+F1 ~ SNP
+F2 ~ SNP
+F3 ~ SNP
+F4 ~ SNP
+'
+
+common_pathway <- userGWAS(covstruc = ldscOut, 
+                           SNPs = snps,
+                           estimation = "DWLS",
+                           model = model_common, 
+                           printwarn = TRUE,
+                           cores = 16, 
+                           toler = FALSE,
+                           SNPSE = FALSE,
+                           parallel = FALSE)
+
+res <- common_pathway %>% 
+  rbindlist()
+
+fwrite(res, paste0("/gpfs/home1/atunez/GWAS_Joelle/Results/EFA_final_version/GSEM_SU_EFA", IDX, ".txt"))
+```
