@@ -4,7 +4,7 @@ Structure:
 
 - FUMA: Contains Manhattan and QQ plots for all three models presented in the manuscript. Bifactor per substance, bifactor per trait, and EFA 4 factor.
   
-- Genetic_Correlations: Contains 5 .svg files presenting the genetic correlations of the different factors in each model with other psychiatric, physical, cognitive and social traits.
+- Genetic_Correlations: Contains 5 .svg files presenting the genetic correlations of the different factors in each model with other psychiatric, physical, cognitive, and social traits.
   
 - SEM_plots: Contains the SEM plots for each one of the three models presented in the manuscript.
   
